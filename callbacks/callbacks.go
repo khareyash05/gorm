@@ -69,6 +69,7 @@ func RegisterDefaultCallbacks(db *gorm.DB, config *Config) {
 	updateCallback.Register("gorm:save_before_associations", SaveBeforeAssociations(false))
 	updateCallback.Register("gorm:update", Update(config))
 	updateCallback.Register("gorm:save_after_associations", SaveAfterAssociations(false))
+	updateCallback.Register("gorm:after_update", AfterUpdate)
 	updateCallback.Match(enableTransaction).Register("gorm:commit_or_rollback_transaction", CommitOrRollbackTransaction)
 	updateCallback.Clauses = config.UpdateClauses
 
