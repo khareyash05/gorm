@@ -73,6 +73,31 @@ func Create(config *Config) func(db *gorm.DB) {
 			return
 		}
 
+		ok, mode := hasReturning(db, supportReturning)
+		if ok {
+			if c, ok := db.Statement.Clauses["ON CONFLICT"]; ok {
+				if onConflict, _ := c.Expression.(clause.OnConflict); onConflict.DoNothing {
+					mode |= gorm.ScanOnConflictDoNothing
+				}
+			}
+
+			rows, err := db.Statement.ConnPool.QueryContext(
+				db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...,
+			)
+			if db.AddError(err) == nil {
+				defer func() {
+					db.AddError(rows.Close())
+				}()
+				gorm.Scan(rows, db, mode)
+
+				if db.Statement.Result != nil {
+					db.Statement.Result.RowsAffected = db.RowsAffected
+				}
+			}
+
+			return
+		}
+
 		result, err := db.Statement.ConnPool.ExecContext(
 			db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...,
 		)
@@ -211,6 +236,16 @@ func AfterCreate(db *gorm.DB) {
 func ConvertToCreateValues(stmt *gorm.Statement) (values clause.Values) {
 	curTime := stmt.DB.NowFunc()
 
+	switch value := stmt.Dest.(type) {
+	case map[string]interface{}:
+		values = ConvertMapToValuesForCreate(stmt, value)
+	case *map[string]interface{}:
+		values = ConvertMapToValuesForCreate(stmt, *value)
+	case []map[string]interface{}:
+		values = ConvertSliceOfMapToValuesForCreate(stmt, value)
+	case *[]map[string]interface{}:
+		values = ConvertSliceOfMapToValuesForCreate(stmt, *value)
+	default:
 		var (
 			selectColumns, restricted = stmt.SelectAndOmitColumns(true, false)
 			_, updateTrackTime        = stmt.Get("gorm:update_track_time")
@@ -318,6 +353,7 @@ func ConvertToCreateValues(stmt *gorm.Statement) (values clause.Values) {
 		default:
 			stmt.AddError(gorm.ErrInvalidData)
 		}
+	}
 
 	if c, ok := stmt.Clauses["ON CONFLICT"]; ok {
 		if onConflict, _ := c.Expression.(clause.OnConflict); onConflict.UpdateAll {
