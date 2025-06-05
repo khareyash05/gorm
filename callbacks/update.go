@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
-	"gorm.io/gorm/utils"
 )
 
 func SetupUpdateReflectValue(db *gorm.DB) {
@@ -54,7 +53,6 @@ func BeforeUpdate(db *gorm.DB) {
 
 // Update update hook
 func Update(config *Config) func(db *gorm.DB) {
-	supportReturning := utils.Contains(config.UpdateClauses, "RETURNING")
 
 	return func(db *gorm.DB) {
 		if db.Error != nil {
@@ -82,32 +80,16 @@ func Update(config *Config) func(db *gorm.DB) {
 			db.Statement.Build(db.Statement.BuildClauses...)
 		}
 
-		checkMissingWhereConditions(db)
-
 		if !db.DryRun && db.Error == nil {
-			if ok, mode := hasReturning(db, supportReturning); ok {
-				if rows, err := db.Statement.ConnPool.QueryContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...); db.AddError(err) == nil {
-					dest := db.Statement.Dest
-					db.Statement.Dest = db.Statement.ReflectValue.Addr().Interface()
-					gorm.Scan(rows, db, mode)
-					db.Statement.Dest = dest
-					db.AddError(rows.Close())
+			result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
 
-					if db.Statement.Result != nil {
-						db.Statement.Result.RowsAffected = db.RowsAffected
-					}
-				}
-			} else {
-				result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
+			if db.AddError(err) == nil {
+				db.RowsAffected, _ = result.RowsAffected()
+			}
 
-				if db.AddError(err) == nil {
-					db.RowsAffected, _ = result.RowsAffected()
-				}
-
-				if db.Statement.Result != nil {
-					db.Statement.Result.Result = result
-					db.Statement.Result.RowsAffected = db.RowsAffected
-				}
+			if db.Statement.Result != nil {
+				db.Statement.Result.Result = result
+				db.Statement.Result.RowsAffected = db.RowsAffected
 			}
 		}
 	}

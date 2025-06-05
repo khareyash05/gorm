@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
-	"gorm.io/gorm/utils"
 )
 
 func BeforeDelete(db *gorm.DB) {
@@ -111,7 +110,6 @@ func DeleteBeforeAssociations(db *gorm.DB) {
 }
 
 func Delete(config *Config) func(db *gorm.DB) {
-	supportReturning := utils.Contains(config.DeleteClauses, "RETURNING")
 
 	return func(db *gorm.DB) {
 		if db.Error != nil {
@@ -151,25 +149,8 @@ func Delete(config *Config) func(db *gorm.DB) {
 			db.Statement.Build(db.Statement.BuildClauses...)
 		}
 
-		checkMissingWhereConditions(db)
-
 		if !db.DryRun && db.Error == nil {
-			ok, mode := hasReturning(db, supportReturning)
-			if !ok {
-				result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
-
-				if db.AddError(err) == nil {
-					db.RowsAffected, _ = result.RowsAffected()
-
-					if db.Statement.Result != nil {
-						db.Statement.Result.Result = result
-						db.Statement.Result.RowsAffected = db.RowsAffected
-					}
-				}
-
-				return
-			}
-
+			var mode gorm.ScanMode
 			if rows, err := db.Statement.ConnPool.QueryContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...); db.AddError(err) == nil {
 				gorm.Scan(rows, db, mode)
 

@@ -377,9 +377,6 @@ func onConflictOption(stmt *gorm.Statement, s *schema.Schema, defaultUpdatingCol
 
 func saveAssociations(db *gorm.DB, rel *schema.Relationship, rValues reflect.Value, selectColumns map[string]bool, restricted bool, defaultUpdatingColumns []string) error {
 	// stop save association loop
-	if checkAssociationsSaved(db, rValues) {
-		return nil
-	}
 
 	var (
 		selects, omits []string
@@ -435,19 +432,3 @@ func saveAssociations(db *gorm.DB, rel *schema.Relationship, rValues reflect.Val
 // if values kind is Struct, check it has been saved
 // if values kind is Slice/Array, check all items have been saved
 var visitMapStoreKey = "gorm:saved_association_map"
-
-func checkAssociationsSaved(db *gorm.DB, values reflect.Value) bool {
-	if visit, ok := db.Get(visitMapStoreKey); ok {
-		if v, ok := visit.(*visitMap); ok {
-			if loadOrStoreVisitMap(v, values) {
-				return true
-			}
-		}
-	} else {
-		vistMap := make(visitMap)
-		loadOrStoreVisitMap(&vistMap, values)
-		db.Set(visitMapStoreKey, &vistMap)
-	}
-
-	return false
-}
